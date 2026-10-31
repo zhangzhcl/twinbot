@@ -1,0 +1,74 @@
+services:
+  # 可选：域名 HTTPS 网关（.env 配置 DOMAIN 后以 --profile tls 启用，自动签发证书）
+  caddy:
+    image: caddy:2-alpine
+    container_name: twinbot-caddy
+    restart: unless-stopped
+    profiles:
+      - tls
+    network_mode: host
+    environment:
+      DOMAIN: ${DOMAIN:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - control-api
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: twinbot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-twinbot}
+      POSTGRES_USER: ${POSTGRES_USER:-twinbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?PostgreSQL password required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-twinbot} -d ${POSTGRES_DB:-twinbot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - twinbot-backend
+
+  control-api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.control
+    container_name: twinbot-control-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      CONTROL_PORT: 8787
+      CONTROL_HOST: 0.0.0.0
+      SERVER_ROLE: ${SERVER_ROLE:-all}
+      DATABASE_URL: postgres://${POSTGRES_USER:-twinbot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-twinbot}
+      CONTROL_TOKENS_JSON: ${CONTROL_TOKENS_JSON:?User tokens mapping required}
+      CLOUD_RUNTIME_TOKENS_JSON: ${CLOUD_RUNTIME_TOKENS_JSON:-{}}
+      AGENT_PROVIDER: ${AGENT_PROVIDER:-openai-compatible}
+      AGENT_MODEL: ${AGENT_MODEL:-}
+      AGENT_API_KEY: ${AGENT_API_KEY:-}
+      AGENT_API_BASE_URL: ${AGENT_API_BASE_URL:-}
+      AGENT_CONCURRENCY: ${AGENT_CONCURRENCY:-2}
+      AGENT_TIMEOUT_MS: ${AGENT_TIMEOUT_MS:-120000}
+      PREVIEW_PUBLIC_BASE_URL: ${PREVIEW_PUBLIC_BASE_URL:-}
+    ports:
+      - "127.0.0.1:8787:8787"
+    networks:
+      - twinbot-backend
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+
+networks:
+  twinbot-backend:
+    driver: bridge

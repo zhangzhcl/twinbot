@@ -1,0 +1,73 @@
+# ==============================================================================
+# TwinBot Control API - 生产 Dockerfile
+# 控制服务器部署镜像（支持 SERVER_ROLE: all | gateway | worker）
+# Node.js 要求 >= 22.19.0
+# ==============================================================================
+
+# 构建阶段
+FROM node:22-bookworm-slim AS builder
+
+WORKDIR /app
+
+# 安装编译所需的系统工具
+# 腾讯云控制机构建时切换到腾讯云内网镜像源（外网环境可用 deb.debian.org）
+RUN sed -i 's@deb.debian.org@mirrors.cloud.tencent.com@g; s@security.debian.org@mirrors.cloud.tencent.com@g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# 拷贝 workspace 定义与依赖定义
+COPY package*.json ./
+COPY packages/tool-protocol/package*.json ./packages/tool-protocol/
+COPY packages/ws-protocol/package*.json ./packages/ws-protocol/
+COPY apps/control-api/package*.json ./apps/control-api/
+COPY apps/cloud-runtime/package*.json ./apps/cloud-runtime/
+COPY apps/desktop/package*.json ./apps/desktop/
+
+# 安装全量依赖
+# 国内构建切换 npmmirror：加速 npm 包与 electron 二进制下载
+RUN npm config set registry https://registry.npmmirror.com && \
+    ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm ci
+
+# 拷贝全量源代码与 tsconfig
+COPY tsconfig*.json ./
+COPY packages/ ./packages/
+COPY apps/control-api/ ./apps/control-api/
+
+# 编译协议包与 control-api
+RUN npm run build -w @lca/tool-protocol \
+    && npm run build -w @lca/ws-protocol \
+    && npm run build -w @lca/control-api
+
+# 清理构建缓存，保留生产所需模块
+RUN npm prune --omit=dev
+
+# 运行阶段
+FROM node:22-bookworm-slim AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    PORT=8787 \
+    CONTROL_PORT=8787 \
+    CONTROL_HOST=0.0.0.0 \
+    SERVER_ROLE=all
+
+# 创建运行专用的非 root 用户
+RUN groupadd -g 10001 twinbot && \
+    useradd -u 10001 -g twinbot -m -s /bin/bash twinbot
+
+# 拷贝依赖与构建产物
+COPY --from=builder --chown=twinbot:twinbot /app/node_modules ./node_modules
+COPY --from=builder --chown=twinbot:twinbot /app/package.json ./package.json
+COPY --from=builder --chown=twinbot:twinbot /app/packages ./packages
+COPY --from=builder --chown=twinbot:twinbot /app/apps/control-api ./apps/control-api
+
+USER twinbot
+
+EXPOSE 8787
+
+# 默认启动 control-api 服务
+CMD ["node", "apps/control-api/dist/main.js"]

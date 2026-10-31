@@ -1,0 +1,57 @@
+# ==============================================================================
+# TwinBot 执行服务器 (4C8G) Docker Compose 备选方案
+# 适用于不搭建 K3s、直接在执行机使用 Docker 运行 2 个隔离沙箱容器的场景
+# ==============================================================================
+
+services:
+  runtime-user-a:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.runtime
+    container_name: twinbot-runtime-user-a
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2048M
+        reservations:
+          cpus: '0.5'
+          memory: 1024M
+    environment:
+      NODE_ENV: production
+      CONTROL_WS_URL: ${CONTROL_WS_URL:?Control WSS URL required}
+      CLOUD_RUNTIME_POD_ID: pod-user-a
+      CLOUD_RUNTIME_TOKEN: ${RUNTIME_TOKEN_USER_A:?Runtime token user-a required}
+      CLOUD_RUNTIME_WORKSPACE: /workspace
+      WEB_SEARCH_API_KEY: ${WEB_SEARCH_API_KEY:-}
+    volumes:
+      - workspace-user-a:/workspace
+
+  runtime-user-b:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.runtime
+    container_name: twinbot-runtime-user-b
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2048M
+        reservations:
+          cpus: '0.5'
+          memory: 1024M
+    environment:
+      NODE_ENV: production
+      CONTROL_WS_URL: ${CONTROL_WS_URL:?Control WSS URL required}
+      CLOUD_RUNTIME_POD_ID: pod-user-b
+      CLOUD_RUNTIME_TOKEN: ${RUNTIME_TOKEN_USER_B:?Runtime token user-b required}
+      CLOUD_RUNTIME_WORKSPACE: /workspace
+      WEB_SEARCH_API_KEY: ${WEB_SEARCH_API_KEY:-}
+    volumes:
+      - workspace-user-b:/workspace
+
+volumes:
+  workspace-user-a:
+  workspace-user-b:

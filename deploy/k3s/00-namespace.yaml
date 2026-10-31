@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lca-runtimes
+  labels:
+    app.kubernetes.io/part-of: twinbot
+    twinbot.role: cloud-runtime

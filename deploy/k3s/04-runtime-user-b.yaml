@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-user-b
+  namespace: lca-runtimes
+  labels:
+    app: cloud-runtime
+    twinbot.user: user-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloud-runtime
+      twinbot.user: user-b
+  template:
+    metadata:
+      labels:
+        app: cloud-runtime
+        twinbot.user: user-b
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: runtime
+          image: your-registry.example.com/twinbot/cloud-runtime:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 1500m
+              memory: 2Gi
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: CONTROL_WS_URL
+              value: "wss://control.yourdomain.com/v1/ws"
+            - name: CLOUD_RUNTIME_POD_ID
+              value: "pod-user-b"
+            - name: CLOUD_RUNTIME_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: runtime-secrets-user-b
+                  key: token
+            - name: CLOUD_RUNTIME_WORKSPACE
+              value: "/workspace"
+            # 可选：Brave Search API Key；未配置时 web.search 自动回退 DuckDuckGo
+            - name: WEB_SEARCH_API_KEY
+              value: ""
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: tmp-dir
+              mountPath: /tmp
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: workspace-pvc-user-b
+        - name: tmp-dir
+          emptyDir: {}

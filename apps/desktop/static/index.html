@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    />
+    <title>TwinBot — Agent Workspace</title>
+    <link rel="icon" type="image/png" href="./icon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./renderer.js" defer></script>
+  </head>
+  <body>
+    <div class="workspace" id="workspace-container">
+      <!-- 左侧边栏 -->
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">T</div>
+          <div>
+            <p class="brand-name">TWINBOT</p>
+            <p class="brand-caption">SESSION WORKSPACE</p>
+          </div>
+        </div>
+
+        <button class="new-session" id="new-session" type="button">
+          <span aria-hidden="true">＋</span>
+          新建对话
+          <span class="shortcut">N</span>
+        </button>
+
+        <div class="section-label">
+          <span>会话历史</span>
+          <span class="section-rule"></span>
+        </div>
+        <nav id="session-list" class="session-list" aria-label="对话列表"></nav>
+
+        <!-- 侧边栏底部状态与设置区 -->
+        <div class="sidebar-footer">
+          <!-- 引擎与本机设备状态卡片 (精炼展示：云端引擎就绪 + 本机设备已连接，无冗余下拉) -->
+          <div class="node-status-card" id="node-status-card">
+            <div class="status-row">
+              <div class="channel-status">
+                <span class="indicator-dot" id="connection-dot"></span>
+                <span class="channel-label" id="connection-label">云端引擎连接中</span>
+              </div>
+              <span class="engine-badge" id="engine-badge">云端 Pod</span>
+            </div>
+            <div class="status-row device-status-row">
+              <div class="channel-status">
+                <span class="indicator-dot connected" id="device-dot"></span>
+                <span class="device-label" id="device-label">本机设备已连接</span>
+              </div>
+              <span class="device-host-badge" id="device-host-badge">LAPTOP</span>
+            </div>
+          </div>
+
+          <!-- 底部工具条：外观主题切换 + 设置入口 -->
+          <div class="sidebar-actions-bar">
+            <button type="button" class="sidebar-action-btn theme-toggle-btn" id="theme-toggle-btn" title="一键切换深色/浅色外观">
+              <span class="theme-icon" id="theme-icon" aria-hidden="true">☼</span>
+              <span class="theme-text" id="theme-text">浅色外观</span>
+            </button>
+            <button type="button" class="sidebar-action-btn settings-btn" id="settings-btn" title="模型与应用设置">
+              <span aria-hidden="true">⚙</span>
+              <span>设置</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 左侧栏可拖拽宽度把手 -->
+      <div class="resizer" id="resizer-left" title="按住拖拽调整侧边栏宽度 (双击重置)"></div>
+
+      <!-- 中间主对话区 -->
+      <main class="conversation" id="conversation">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">AGENT SESSION <span id="session-sequence">/ —</span></p>
+            <h1 id="session-title" title="双击重命名会话">TwinBot 工作区</h1>
+          </div>
+          <div class="topbar-right">
+            <button type="button" class="open-artifact-btn" id="open-artifact-btn" hidden title="在浏览器打开当前会话的产物页面">
+              <span aria-hidden="true">⌘</span> 打开预览
+            </button>
+          </div>
+        </header>
+
+        <section class="conversation-body" id="conversation-body" aria-label="对话内容">
+          <div class="welcome" id="welcome">
+            <div class="welcome-kicker"><span></span> READY WHEN YOU ARE</div>
+            <h2>把想法变成<br /><em>下一步行动。</em></h2>
+            <p>从一个问题开始。TwinBot 会在你的会话中持续工作，<br />并在需要访问本机文件时先征求你的许可。</p>
+            <div class="suggestions">
+              <button type="button" class="suggestion" data-prompt="帮我梳理这个项目的目录结构">梳理项目目录 <span>↗</span></button>
+              <button type="button" class="suggestion" data-prompt="总结当前会话的重点和下一步">总结重点与下一步 <span>↗</span></button>
+            </div>
+          </div>
+          <div id="messages" class="messages" aria-live="polite"></div>
+        </section>
+
+        <div class="composer-wrap" id="composer-wrap">
+          <p class="notice" id="status-message" role="status">消息会保存到你的持久化会话中。</p>
+          <form id="message-form" class="composer">
+            <label class="sr-only" for="message-input">发送消息给 TwinBot</label>
+            <textarea
+              id="message-input"
+              rows="1"
+              maxlength="16000"
+              placeholder="向 TwinBot 发送消息…"
+              required
+            ></textarea>
+            <div class="composer-footer">
+              <span class="composer-hint"><kbd>Enter</kbd> 发送 <span>·</span> <kbd>Shift + Enter</kbd> 换行</span>
+              <div class="composer-actions">
+                <div class="composer-model-wrap">
+                  <button type="button" id="composer-model-btn" class="composer-model-btn" title="切换模型（云端 Agent 下一次对话生效）">
+                    <span aria-hidden="true">◈</span> <span id="composer-model-name">glm-5.3-flash</span> <span aria-hidden="true">▾</span>
+                  </button>
+                  <div id="composer-model-popover" class="composer-model-popover" hidden></div>
+                </div>
+                <button id="send-button" class="send-button" type="submit" title="发送">
+                  <svg class="send-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.993.993 0 0 0-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </form>
+          <p class="disclaimer">Agent 的回复可能不准确。执行本机工具前会显示审批请求。</p>
+        </div>
+      </main>
+
+      <!-- 右侧面板可拖拽宽度把手 -->
+      <div class="resizer" id="resizer-right" title="按住拖拽调整右侧面板宽度 (双击重置)"></div>
+
+      <!-- 右侧云端监控面板 -->
+      <aside class="pod-panel" id="pod-panel" aria-label="云端执行环境与监控">
+        <div class="pod-panel-header">
+          <div class="pod-panel-title">
+            <div class="pod-avatar" aria-hidden="true">POD</div>
+            <div class="pod-title-meta">
+              <div class="pod-title-row">
+                <h3 id="pod-display-name">pod-user-a</h3>
+                <span class="pod-status-pill online" id="pod-status-pill">
+                  <span class="status-pulse"></span>
+                  <span id="pod-pill-text">在线</span>
+                </span>
+              </div>
+              <p class="pod-caption">云端隔离沙箱容器 · Docker</p>
+            </div>
+          </div>
+        </div>
+
+        <nav class="pod-tabs" role="tablist" aria-label="监控切换">
+          <button type="button" class="pod-tab active" data-tab="info" id="tab-btn-info" role="tab" aria-selected="true">
+            <span class="tab-indicator-icon" aria-hidden="true">◈</span>
+            <span>运行环境</span>
+          </button>
+          <button type="button" class="pod-tab" data-tab="terminal" id="tab-btn-term" role="tab" aria-selected="false">
+            <span class="tab-indicator-icon" aria-hidden="true">❯_</span>
+            <span>实时终端</span>
+          </button>
+          <button type="button" class="pod-tab" data-tab="workspace" id="tab-btn-workspace" role="tab" aria-selected="false">
+            <span class="tab-indicator-icon" aria-hidden="true">▤</span>
+            <span>工作区</span>
+          </button>
+        </nav>
+
+        <!-- Tab 1: 运行环境与监控详情 -->
+        <div class="pod-tab-content active" id="pod-tab-info" role="tabpanel" aria-labelledby="tab-btn-info">
+          <div class="pod-screen-card">
+            <div class="pod-screen-mock">
+              <div class="pod-screen-badge">
+                <span class="indicator-dot connected"></span>
+                <span id="pod-online-status">容器就绪 (Online)</span>
+              </div>
+              <div class="pod-screen-metrics">
+                <div class="metric-item">
+                  <span class="metric-label">隔离沙箱</span>
+                  <span class="metric-value">/app/workspace</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label">宿主系统</span>
+                  <span class="metric-value">Linux x86_64</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label">运行时版本</span>
+                  <span class="metric-value">Node.js v22</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label">网络防护</span>
+                  <span class="metric-value">零入站暴露</span>
+                </div>
+              </div>
+            </div>
+            <p class="pod-screen-label">云端沙箱容器隔离运行中</p>
+          </div>
+
+          <div class="pod-spec-list">
+            <div class="pod-spec-item">
+              <span class="spec-label">执行服务器</span>
+              <span class="spec-value">由服务连接配置决定</span>
+            </div>
+            <div class="pod-spec-item">
+              <span class="spec-label">控制面通道</span>
+              <span class="spec-value">WSS 反向加密长连接</span>
+            </div>
+            <div class="pod-spec-item">
+              <span class="spec-label">沙箱根目录</span>
+              <span class="spec-value">/app/workspace</span>
+            </div>
+            <div class="pod-spec-item">
+              <span class="spec-label">已赋能力</span>
+              <span class="spec-value" id="pod-capabilities">fs (文件隔离沙箱)</span>
+            </div>
+            <div class="pod-spec-item">
+              <span class="spec-label">安全策略</span>
+              <span class="spec-value">路径阻断 / 零外部端口</span>
+            </div>
+            <div class="pod-spec-item">
+              <span class="spec-label">智能体模型</span>
+              <span class="spec-value">智谱 GLM-5.3-flash</span>
+            </div>
+          </div>
+
+          <div class="pod-spec-item">
+              <span class="spec-label">活动 Pod</span>
+              <span class="spec-value">
+                <select id="runtime-select" class="runtime-select" aria-label="选择云端 Runtime" style="max-width:180px">
+                  <option value="">自动 / 未选择</option>
+                </select>
+              </span>
+            </div>
+
+          <div class="pod-action-footer">
+            <div class="sync-time-info">
+              <span class="sync-dot"></span>
+              <span id="last-sync-time">心跳正常 (10 秒轮询)</span>
+            </div>
+            <button type="button" class="refresh-pod-button" id="refresh-pod-button">立即同步</button>
+          </div>
+        </div>
+
+        <!-- Tab 2: 实时交互式终端 -->
+        <div class="pod-tab-content" id="pod-tab-terminal" role="tabpanel" aria-labelledby="tab-btn-term" hidden>
+          <div class="terminal-shell">
+            <div class="terminal-chrome">
+              <div class="terminal-lights" aria-hidden="true">
+                <span class="light red"></span>
+                <span class="light yellow"></span>
+                <span class="light green"></span>
+              </div>
+              <span class="terminal-title">pod-user-a: /app/workspace</span>
+              <div class="terminal-actions">
+                <button type="button" class="terminal-action-btn" id="help-term-button" title="常用命令列表">帮助</button>
+                <button type="button" class="terminal-action-btn" id="clear-term-button" title="清空终端输出">清屏</button>
+              </div>
+            </div>
+            <div class="terminal-view" id="terminal-logs" tabindex="0" role="region" aria-label="实时任务日志输出">
+              <p class="term-line term-system"><span class="term-tag">[SYS]</span> TwinBot 控制面客户端已建立连接</p>
+              <p class="term-line term-success"><span class="term-tag">[SANDBOX]</span> 沙箱工作区挂载于 /app/workspace</p>
+              <p class="term-line term-info"><span class="term-tag">[INFO]</span> 输入 help 查看终端交互命令，支持上下键历史</p>
+            </div>
+            <!-- 真实的命令行交互输入框 -->
+            <form class="terminal-prompt-bar" id="terminal-cmd-form">
+              <span class="prompt-user">guest@sandbox</span><span class="prompt-sep">:</span><span class="prompt-path">~</span><span class="prompt-symbol">$</span>
+              <input
+                type="text"
+                id="terminal-cmd-input"
+                class="terminal-cmd-input"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="输入命令 (如: ls, pwd, cat, status, help)..."
+              />
+            </form>
+          </div>
+        </div>
+
+        <!-- Tab 3: 工作区沙箱管理 -->
+        <div class="pod-tab-content" id="pod-tab-workspace" role="tabpanel" aria-labelledby="tab-btn-workspace" hidden>
+          <div class="workspace-info-card">
+            <div class="workspace-path-banner">
+              <span class="path-label">沙箱路径</span>
+              <code class="path-code">/app/workspace</code>
+            </div>
+            <p class="workspace-desc">云端专属代码与执行工作区。模型的所有文件创建、临时调试产物均被限制在此安全工作区内，与云端主系统及本地环境严格隔离。</p>
+          </div>
+
+          <div class="workspace-status-card">
+            <div class="ws-status-header">
+              <span class="ws-status-title">沙箱就绪状态</span>
+              <span class="badge-tag">活跃隔离中</span>
+            </div>
+            <ul class="ws-rules-list">
+              <li>读写边界：受限于工作区根目录</li>
+              <li>单文件传输上限：1MB 保护阈值</li>
+              <li>工具调用：自动向控制面报备审计</li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- 本地工具执行审批弹窗 (参考用户指定设计：电脑图标、机器名、命令预览、从不 / 始终允许 / 允许一次) -->
+    <div class="approval-modal-backdrop" id="approval-modal-backdrop" hidden>
+      <div class="approval-card" id="approval-card" role="dialog" aria-modal="true" aria-labelledby="approval-title">
+        <div class="approval-header">
+          <div class="approval-device-badge">
+            <svg class="device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="12" rx="2" />
+              <line x1="2" y1="20" x2="22" y2="20" />
+            </svg>
+            <span>电脑</span>
+          </div>
+          <button type="button" class="approval-close-btn" id="approval-btn-close" aria-label="关闭">✕</button>
+        </div>
+
+        <h2 class="approval-title" id="approval-title">
+          允许 TwinBot 及所有 Bot 在你的本地电脑上运行命令吗？
+        </h2>
+
+        <div class="approval-meta">
+          <p class="approval-machine-id" id="approval-machine-id">LAPTOP-LOCAL</p>
+          <p class="approval-hint">此设置适用于 TwinBot 和所有 Bot，随时可在设置中更改。</p>
+        </div>
+
+        <div class="approval-code-box">
+          <code id="approval-code-text">Write-Output 'local-read-ok'; hostname; Get-Location</code>
+        </div>
+
+        <div class="approval-actions">
+          <button type="button" class="approval-action-btn btn-never" id="approval-btn-never">从不</button>
+          <button type="button" class="approval-action-btn btn-always" id="approval-btn-always">始终允许</button>
+          <button type="button" class="approval-action-btn btn-once" id="approval-btn-once">允许一次</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- user.ask 提问弹窗：Agent 向用户提问（选项按钮 + 可选自由文本） -->
+    <div class="approval-modal-backdrop" id="question-modal-backdrop" hidden>
+      <div class="approval-card" role="dialog" aria-modal="true" aria-labelledby="question-title">
+        <div class="approval-header">
+          <div class="approval-device-badge">
+            <svg class="device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <span>Agent 提问</span>
+          </div>
+          <button type="button" class="approval-close-btn" id="question-btn-close" aria-label="关闭">✕</button>
+        </div>
+
+        <h2 class="approval-title" id="question-title">Agent 想向你了解一些信息</h2>
+
+        <div class="approval-meta">
+          <p class="approval-machine-id" id="question-machine-id">LAPTOP-LOCAL</p>
+        </div>
+
+        <div class="approval-code-box">
+          <code id="question-text">…</code>
+        </div>
+
+        <div class="approval-actions question-choices" id="question-choices"></div>
+
+        <div class="approval-code-box question-input-box" id="question-input-box">
+          <input type="text" id="question-free-input" placeholder="输入你的回答后回车提交…" />
+        </div>
+
+        <div class="approval-actions">
+          <button type="button" class="approval-action-btn btn-once" id="question-btn-submit">提交回答</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除会话确认浮层：锚定在会话行旁的紧凑卡片，无全屏遮罩 -->
+    <div class="approval-modal-backdrop delete-confirm-backdrop" id="delete-confirm-backdrop" hidden>
+      <div class="approval-card delete-confirm-pop" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
+        <div class="approval-header">
+          <div class="approval-device-badge">
+            <svg class="device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+            <span>删除会话</span>
+          </div>
+          <button type="button" class="approval-close-btn" id="delete-confirm-btn-close" aria-label="关闭">✕</button>
+        </div>
+
+        <h2 class="approval-title" id="delete-confirm-title">删除会话？</h2>
+
+        <div class="approval-meta">
+          <p class="approval-hint">其全部消息与任务记录将一并删除，此操作不可恢复。</p>
+        </div>
+
+        <div class="approval-actions">
+          <button type="button" class="approval-action-btn btn-never" id="delete-confirm-btn-cancel">取消</button>
+          <button type="button" class="approval-action-btn btn-danger" id="delete-confirm-btn-ok">确认删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 综合设置弹窗 (模型与供应商配置 + 外观切换) -->
+    <div class="settings-modal-backdrop" id="settings-modal-backdrop" hidden>
+      <div class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="settings-header">
+          <div class="settings-header-title">
+            <span class="settings-gear-icon" aria-hidden="true">⚙</span>
+            <h2 id="settings-title">应用与模型配置</h2>
+          </div>
+          <button type="button" class="settings-close-btn" id="settings-btn-close" aria-label="关闭设置">✕</button>
+        </div>
+
+        <nav class="settings-tabs" role="tablist">
+          <button type="button" class="settings-tab active" data-tab="model" id="tab-model-btn">
+            <span>智能体模型与供应商</span>
+          </button>
+          <button type="button" class="settings-tab" data-tab="appearance" id="tab-appearance-btn">
+            <span>外观与界面</span>
+          </button>
+          <button type="button" class="settings-tab" data-tab="connection" id="tab-connection-btn">
+            <span>服务连接</span>
+          </button>
+        </nav>
+
+        <!-- 模型配置 Tab -->
+        <div class="settings-tab-pane active" id="settings-pane-model">
+          <p class="settings-pane-desc">管理云端 Agent 调用的模型配置（OpenAI 协议兼容端点）。可保存多套配置，在列表或输入框旁一键切换启用。</p>
+
+          <!-- 列表视图（默认） -->
+          <div id="model-list-view">
+            <div class="model-list-header">
+              <span class="section-label">已保存的配置</span>
+              <button type="button" class="model-add-btn" id="model-add-btn">＋ 添加配置</button>
+            </div>
+            <div id="model-profile-list" class="model-profile-list"></div>
+          </div>
+
+          <!-- 表单视图（添加 / 编辑） -->
+          <div id="model-form-view" hidden>
+            <div class="form-group">
+              <label for="setting-profile-name">配置名称（如：智谱 GLM / DeepSeek V3）</label>
+              <input type="text" id="setting-profile-name" class="settings-input" placeholder="我的常用配置" spellcheck="false" maxlength="40" />
+            </div>
+
+            <div class="form-group">
+              <label for="setting-base-url">API 基础地址 (Base URL)</label>
+              <input type="text" id="setting-base-url" class="settings-input" placeholder="https://open.bigmodel.cn/api/coding/paas/v4" spellcheck="false" />
+              <span class="input-hint">接口请求端点，支持智谱、DeepSeek 或任意兼容 OpenAI 协议的网关。</span>
+            </div>
+
+            <div class="form-group">
+              <label for="setting-api-key">API 接口密钥 (API Key)</label>
+              <div class="password-input-wrap">
+                <input type="password" id="setting-api-key" class="settings-input" placeholder="输入 API Key (如: a28dd...)" spellcheck="false" />
+                <button type="button" class="toggle-password-btn" id="toggle-key-visibility" title="显示/隐藏密钥">👁</button>
+              </div>
+              <span class="input-hint">安全存储，执行任务时传递给云端 Agent 引擎调用模型。</span>
+            </div>
+
+            <div class="form-group">
+              <label for="setting-model-name">模型标识 (Model ID)</label>
+              <input type="text" id="setting-model-name" class="settings-input" placeholder="glm-5.3-flash" spellcheck="false" />
+              <span class="input-hint">例如：glm-5.3-flash、glm-4-plus、deepseek-chat、gpt-4o</span>
+            </div>
+
+            <div class="settings-footer-actions">
+              <span class="save-status-hint" id="model-save-status"></span>
+              <button type="button" class="settings-save-btn settings-save-secondary" id="model-cancel-btn">取消</button>
+              <button type="button" class="settings-save-btn settings-save-secondary" id="model-save-profile-btn">保存配置</button>
+              <button type="button" class="settings-save-btn" id="model-save-btn">保存并启用</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 外观配置 Tab -->
+        <div class="settings-tab-pane" id="settings-pane-appearance" hidden>
+          <p class="settings-pane-desc">切换桌面客户端外观主题风格，遵循 Pionle 极简质感设计系统。</p>
+
+          <div class="theme-options-grid">
+            <label class="theme-card-option" id="theme-opt-dark">
+              <input type="radio" name="app-theme-choice" value="dark" id="theme-radio-dark" checked />
+              <div class="theme-card-content">
+                <span class="theme-badge-icon">🌙</span>
+                <span class="theme-card-title">深色模式 (Pionle Dark)</span>
+                <span class="theme-card-desc">纯净中性黑曜石暗灰底色，低眩光沉浸感。</span>
+              </div>
+            </label>
+
+            <label class="theme-card-option" id="theme-opt-light">
+              <input type="radio" name="app-theme-choice" value="light" id="theme-radio-light" />
+              <div class="theme-card-content">
+                <span class="theme-badge-icon">☀️</span>
+                <span class="theme-card-title">浅色模式 (Pionle Light)</span>
+                <span class="theme-card-desc">纯净象牙白与浅灰对比层次，清晰通透。</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 服务连接 Tab：首次使用配置控制端地址与接入 Token -->
+        <div class="settings-tab-pane" id="settings-pane-connection" hidden>
+          <p class="settings-pane-desc">配置要连接的控制服务器与接入凭据。保存后重启应用生效；执行端 Pod 由管理员在服务器侧另行部署。</p>
+          <div class="form-group">
+            <label for="setting-control-api">控制端 API 地址</label>
+            <input type="text" id="setting-control-api" class="settings-input" placeholder="https://your-server:8787" spellcheck="false" />
+          </div>
+          <div class="form-group">
+            <label for="setting-control-ws">控制端 WSS 地址</label>
+            <input type="text" id="setting-control-ws" class="settings-input" placeholder="wss://your-server:8787/v1/ws" spellcheck="false" />
+            <span class="input-hint">与 API 同一台服务器，协议为 wss（本机调试可用 ws）。</span>
+          </div>
+          <div class="form-group">
+            <label for="setting-control-token">接入 Token</label>
+            <div class="password-input-wrap">
+              <input type="password" id="setting-control-token" class="settings-input" placeholder="管理员分配的用户 Token（至少 8 位）" spellcheck="false" />
+            </div>
+            <span class="input-hint">由控制端管理员在 CONTROL_TOKENS_JSON 中分配，按用户隔离。</span>
+          </div>
+          <div class="settings-footer-actions">
+            <span class="save-status-hint" id="connection-save-status"></span>
+            <button type="button" class="settings-save-btn" id="connection-save-btn">保存并重启应用</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
