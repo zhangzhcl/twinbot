@@ -1,0 +1,81 @@
+{
+  "name": "@lca/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TwinBot desktop client",
+  "author": "TwinBot",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-static.js",
+    "dev": "npm run build && electron .",
+    "start": "electron .",
+    "package:win": "npm run build && electron-builder --win nsis --x64 --arm64",
+    "package:mac": "npm run build && electron-builder --mac dmg --x64 --arm64",
+    "package:linux": "npm run build && electron-builder --linux AppImage --x64 --arm64"
+  },
+  "build": {
+    "appId": "com.twinbot.desktop",
+    "productName": "TwinBot",
+    "asar": true,
+    "directories": {
+      "output": "../../release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "category": "Utility",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@lca/tool-protocol": "0.1.0",
+    "@lca/ws-protocol": "0.1.0",
+    "uuid": "^10.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.12",
+    "electron": "33.4.11",
+    "electron-builder": "^26.18.0",
+    "typescript": "^5.6.3"
+  }
+}

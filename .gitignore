@@ -1,0 +1,19 @@
+node_modules/
+dist/
+release/
+*.log
+.DS_Store
+.tsx-cache/
+.env
+.env.*
+!.env.example
+
+desktop.config.json
+apps/desktop/desktop.config.json
+
+# 部署产物与本地生成文件
+runtime.env
+twinbot-desktop-config.txt
+pnpm-lock.yaml
+.zcode/
+.zcode/

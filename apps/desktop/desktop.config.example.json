@@ -1,0 +1,5 @@
+{
+  "CONTROL_API_URL": "https://your-server:8787",
+  "CONTROL_WS_URL": "wss://your-server/v1/ws",
+  "CONTROL_TOKEN": "管理员分配的用户 Token（≥8 位）"
+}

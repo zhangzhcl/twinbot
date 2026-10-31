@@ -1,0 +1,21 @@
+{
+  "name": "local-cloud-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local + cloud agent system scaffold (Electron desktop + shared protocols)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @lca/tool-protocol && npm run build -w @lca/ws-protocol && npm run build -w @lca/control-api && npm run build -w @lca/cloud-runtime && npm run build -w @lca/desktop",
+    "test": "npm run build && node --test packages/tool-protocol/test/*.test.cjs packages/ws-protocol/test/*.test.cjs apps/control-api/test/*.test.cjs apps/cloud-runtime/test/*.test.cjs apps/desktop/test/*.test.cjs",
+    "dev:desktop": "npm run dev -w @lca/desktop"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}

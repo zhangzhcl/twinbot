@@ -1,0 +1,79 @@
+# ==============================================================================
+# TwinBot Cloud Runtime - 生产 Dockerfile
+# 执行服务器 Pod / 沙箱容器镜像（只向 Control API 建立主动长连接）
+# 严格遵守非 root 运行、工作区隔离与只读根文件系统规约
+# ==============================================================================
+
+# 构建阶段
+FROM node:22-bookworm-slim AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY packages/tool-protocol/package*.json ./packages/tool-protocol/
+COPY packages/ws-protocol/package*.json ./packages/ws-protocol/
+COPY apps/cloud-runtime/package*.json ./apps/cloud-runtime/
+
+# 安装依赖
+RUN npm ci
+
+# 拷贝源代码
+COPY tsconfig*.json ./
+COPY packages/tool-protocol/ ./packages/tool-protocol/
+COPY packages/ws-protocol/ ./packages/ws-protocol/
+COPY apps/cloud-runtime/ ./apps/cloud-runtime/
+
+# 编译
+RUN npm run build -w @lca/tool-protocol \
+    && npm run build -w @lca/ws-protocol \
+    && npm run build -w @lca/cloud-runtime
+
+# 裁剪仅保留生产依赖
+RUN npm prune --omit=dev
+
+# 运行阶段
+FROM node:22-bookworm-slim AS runner
+
+WORKDIR /app
+
+# 工具依赖的系统包：
+#   chromium  —— browser.use 无头浏览器（playwright-core 以 executablePath 复用）
+#   python3   —— code.run 的 Python 执行
+#   git/curl  —— shell.exec 常用工具链
+#   fonts     —— 浏览器截图渲染中文与西文字体
+# 国内执行机构建时 debian 官方源较慢，统一切换到华为云镜像
+RUN sed -i 's@deb.debian.org@mirrors.huaweicloud.com@g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      chromium \
+      python3 \
+      git \
+      curl \
+      ca-certificates \
+      fonts-liberation \
+      fonts-noto-cjk && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV NODE_ENV=production \
+    CLOUD_RUNTIME_WORKSPACE=/workspace \
+    CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium \
+    BROWSER_USER_DATA_DIR=/tmp/twinbot-browser
+
+# 创建沙箱执行专用非 root 用户
+RUN groupadd -g 10001 runtime && \
+    useradd -u 10001 -g runtime -m -s /bin/bash runtime && \
+    mkdir -p /workspace && \
+    chown -R runtime:runtime /workspace
+
+# 拷贝运行时代码和模块
+COPY --from=builder --chown=runtime:runtime /app/node_modules ./node_modules
+COPY --from=builder --chown=runtime:runtime /app/package.json ./package.json
+COPY --from=builder --chown=runtime:runtime /app/packages ./packages
+COPY --from=builder --chown=runtime:runtime /app/apps/cloud-runtime ./apps/cloud-runtime
+
+USER runtime
+
+VOLUME ["/workspace"]
+
+# 启动 Cloud Runtime 守护进程
+CMD ["node", "apps/cloud-runtime/dist/main.js"]
